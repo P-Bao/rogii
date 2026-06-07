@@ -1,0 +1,121 @@
+# ── Data (never commit raw competition data) ──────────────────────
+data/raw/*
+data/external/*
+data/processed/*
+!data/raw/.gitkeep
+!data/external/.gitkeep
+!data/processed/.gitkeep
+
+# ── Results (large binary outputs) ───────────────────────────────
+results/experiments/*.npy
+results/experiments/*.pkl
+results/experiments/*.pt
+results/experiments/*.bin
+results/submissions/*.csv
+results/plots/*.png
+results/plots/*.pdf
+!results/experiments/.gitkeep
+!results/submissions/.gitkeep
+!results/plots/.gitkeep
+
+# Keep config JSON (small, useful for reproducibility)
+# results/experiments/*.json → tracked
+
+# ── Models / Checkpoints ──────────────────────────────────────────
+*.ckpt
+*.pth
+*.pt
+*.bin
+*.safetensors
+checkpoints/
+models/
+runs/
+
+# ── Notebook outputs (strip before committing) ────────────────────
+# Use: jupyter nbconvert --clear-output --inplace notebooks/*.ipynb
+notebooks/*_out.ipynb
+notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# ── Virtual environments ──────────────────────────────────────────
+.venv/
+venv/
+env/
+.env/
+ENV/
+.conda/
+
+# ── Secrets / Credentials ─────────────────────────────────────────
+.env
+.env.*
+*.key
+*.pem
+secrets/
+kaggle.json
+openai_key.txt
+anthropic_key.txt
+
+# ── OS / Editor ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# ── Logs ──────────────────────────────────────────────────────────
+*.log
+logs/
+wandb/
+mlruns/
+lightning_logs/
+tb_logs/
+
+# ── HuggingFace cache ─────────────────────────────────────────────
+.cache/
+hub/
+
+# ── Node (ecc / mcp tools) ───────────────────────────────────────
+node_modules/
+.pnpm-store/
+pnpm-lock.yaml
+package-lock.json
+
+# ── Compiled / generated ──────────────────────────────────────────
+*.pyc
+*.o
+*.a
+*.lib
+*.out
+*.tex.bak
+
+# ── Temporary ─────────────────────────────────────────────────────
+tmp/
+temp/
+.tmp/
+scratch/
+*.tmp
+*.bak
+
+# ── Keep these tracked ────────────────────────────────────────────
+!.gitkeep
+!.gitignore
+!CLAUDE.md
+!PLAN.md
+!README.md

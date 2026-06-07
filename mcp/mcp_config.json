@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/repo"],
+      "description": "Local file access for Claude Code"
+    }
+  },
+  "_notes": [
+    "Update '/path/to/repo' to absolute path of this repository.",
+    "Add more MCP servers here as needed (e.g., sqlite, fetch, github).",
+    "Reference: https://modelcontextprotocol.io/docs/concepts/servers"
+  ]
+}
