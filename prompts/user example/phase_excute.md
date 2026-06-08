@@ -3,7 +3,7 @@ Read:
 - CLAUDE.md
 - research/current_plan.md
 - research/experiment_queue.md
-Execute ONLY Phase 1.
+
 Tasks:
 1. Create required folders.
 2. Create notebook templates.
