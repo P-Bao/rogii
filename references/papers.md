@@ -48,4 +48,5 @@ Relevant papers with key takeaways. No need to read full paper — just extract 
 
 | Paper | Method | Relevance | Planned Experiment |
 |-------|--------|-----------|-------------------|
-| [FILL] | [FILL] | [FILL] | EXP-[FILL] |
+| Jing, Ye, Cao, Ran (2022) — "Actual wellbore tortuosity evaluation using a new quasi-three-dimensional approach", *Petroleum* 8:118-127 | Q-3D tortuosity index from survey/trajectory data (T_incline, Gamma_incline, TQG_Q3D, etc.) | High — mycarta toolkit's single best feature group (−0.107 RMSE in their ablation); high-tortuosity sections mark active steering correlated with formation deviation | EXP-002 (H-001) |
+| Zeng, Bhaidasna, Zou (2026) — "Integrated Automation: Combining Automated Geosteering and Well-Placement", IADC/SPE-230729-MS | Automated geosteering / well-placement integration | Background context on how TVT prediction feeds real drilling decisions; cited by mycarta toolkit | Not planned — background reading only |
