@@ -2,14 +2,14 @@
 
 ## Primary Metric
 
-**Metric**: [FILL — e.g., AUC-ROC, RMSE, F1, MAP@K, Log Loss]
+**Metric**: Root Mean Square Error (RMSE)
 
 **Formula**:
 ```
-[FILL: paste formula here]
+RMSE = sqrt( mean( (y_true - y_pred)^2 ) )
 ```
 
-**Direction**: Higher is better / Lower is better
+**Direction**: Lower is better
 
 **Optimized on**: Public LB / Private LB (final ranking)
 
@@ -37,14 +37,14 @@
 ```python
 # Example: compute metric locally
 import numpy as np
-from sklearn.metrics import roc_auc_score  # change as needed
+from sklearn.metrics import mean_squared_error
 
 def compute_metric(y_true, y_pred):
     """
-    Compute competition metric.
+    Compute competition metric (RMSE).
     Returns: float score
     """
-    return roc_auc_score(y_true, y_pred)
+    return np.sqrt(mean_squared_error(y_true, y_pred))
 
 # Cross-validation usage
 # score = compute_metric(val_targets, val_preds)

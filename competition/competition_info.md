@@ -4,19 +4,19 @@
 
 | Field | Value |
 |-------|-------|
-| Name | [FILL: competition name] |
+| Name | ROGII - Wellbore Geology Prediction |
 | Platform | Kaggle |
-| URL | [FILL: competition URL] |
-| Start Date | [FILL] |
-| End Date | [FILL] |
-| Team Size Limit | [FILL] |
-| Submission Limit / Day | [FILL] |
+| URL | https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction |
+| Start Date | May 5, 2026 |
+| End Date | August 5, 2026 |
+| Team Size Limit | TBD |
+| Submission Limit / Day | TBD |
 
 ## Problem Type
 
 - [ ] Binary Classification
 - [ ] Multi-class Classification
-- [ ] Regression
+- [x] Regression
 - [ ] Multi-label Classification
 - [ ] Object Detection
 - [ ] NLP / Text
@@ -26,22 +26,27 @@
 
 ## Task Description
 
-[FILL: 2-3 sentences describing what must be predicted]
+Develop machine learning models to predict the geology (True Vertical Thickness, TVT) encountered along a horizontal wellbore. The goal is to identify favorable geological layers from drilling data, which helps improve the accuracy of well placement during drilling operations.
 
 ## Input
 
-[FILL: describe input features/data modalities]
+Horizontal well trajectories, geological surfaces, and log data (such as Gamma Ray data) from vertical reference logs (Typewells).
 
 ## Target
 
-[FILL: describe the target variable(s)]
+True Vertical Thickness (TVT) for the evaluation zone of each horizontal well.
 
 ## Prize
 
-- 1st: $[FILL]
-- 2nd: $[FILL]
-- 3rd: $[FILL]
+- 1st: $25,000
+- 2nd: $13,000
+- 3rd: $7,000
+- 4th: $5,000
 
 ## Notes
 
-[FILL: any special rules, external data policy, code requirements]
+Featured Code Competition. Code Requirements:
+- CPU/GPU Notebook <= 9 hours run-time
+- Internet access disabled
+- Freely & publicly available external data is allowed
+- Submission file must be named submission.csv
