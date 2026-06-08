@@ -42,4 +42,5 @@ Public repos with useful code to adapt (not copy verbatim — understand then re
 
 | Repo | What to borrow | EXP |
 |------|---------------|-----|
-| [FILL] | [FILL] | EXP-[FILL] |
+| [mycarta/rogii-geosteering-toolkit](https://github.com/mycarta/rogii-geosteering-toolkit) | Geosteering tools and utilities | TBD |
+| [geosteering-no/inversion_school_geosteering](https://github.com/geosteering-no/inversion_school_geosteering) | Inversion and geosteering educational methods | TBD |
