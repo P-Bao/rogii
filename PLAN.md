@@ -20,6 +20,8 @@ Required:
 competition/
 data/
 notebooks/
+notebooks/reference/mine/
+notebooks/reference/top_score/
 src/
 research/
 memory/
