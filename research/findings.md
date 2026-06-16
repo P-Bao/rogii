@@ -89,24 +89,61 @@ well-overlap question to `research/open_questions.md` Critical table, recorded
 
 ---
 
-## Template for new findings
+## 2026-06-10 — Finding: EXP-007 (Ridge stack) regressed; pf_ancc is NOT a quality PF heuristic
 
-```
-## [DATE] — Finding: [SHORT TITLE]
+**Context**: EXP-007 ran on Kaggle 2×T4 (2026-06-10, ~2.5 hrs). Full ablation results logged
+in `exp007_ridge_stack__GPU.ipynb`. Submission built via `rogii-submission-ridge-stack-proj.ipynb`
+with blend α=0.95 + EXP-009 polynomial projection postprocess.
 
-**Context**: EXP-[ID] or [description]
-**Finding**: [concrete observation]
-**Evidence**: CV=[FILL], LB=[FILL] or [other metric]
-**Implication**: [what this means for next steps]
-**Action taken**: [what was done as a result]
-```
+**Finding — Part 1: Ridge meta-learner alone does NOT beat baseline**
+
+| Variant | OOF RMSE (residual) |
+|---------|---------------------|
+| A — PF heuristic only (0.5×pf_ancc + 0.5×pf_z) | 13.744 |
+| B — Ridge stack only | 10.562 |
+| C — 0.30 Ridge / 0.70 PF (reference ratio) | 12.143 |
+| D — Tuned blend (α=0.95) | 10.550 |
+| Baseline aw pipeline | **10.452** |
+
+Ridge stack alone: OOF 10.562 vs baseline 10.452 — **regression of 0.11 RMSE**.
+
+**Finding — Part 2: The PF heuristic branch is missing — pf_ancc is a single-seed feature artifact**
+
+`train_df['pf_ancc']` has standalone RMSE = 13.744, compared to our 6 base models which all
+score 10.6–10.7. This means `pf_ancc` contributes no useful signal as a final predictor. The
+reference notebooks' PF heuristic is a *separately built inference-mode artifact*:
+`run_pf_lik_ensemble_scales` with 128 seeds × 500 particles × 4 scales. Our aw pipeline's
+`pf_ancc` is generated once during feature building (low-quality single-seed feature extraction
+run), NOT the reference's high-quality inference estimator. These are architecturally different.
+
+**Finding — Part 3: Submission LB = 10.208 — regression of 0.244 vs BASELINE_V1 (9.964)**
+
+Submission used α=0.95 (nearly pure Ridge) + polynomial projection postprocess applied to test.
+The projection was applied to only 3 test wells (anomaly — see open_questions.md for root cause
+hypothesis). Whether the projection helped, hurt, or was mostly inactive is unclear; the
+regression is primarily attributable to the Ridge stacker.
+
+**Evidence**: EXP-007 ablation output (exp007_ridge_stack__GPU.ipynb lines 779–878);
+Submission LB score 10.208.
+
+**Implication**:
+1. Do NOT resubmit Ridge + pf_ancc blend in any form. The heuristic branch must first be built
+   properly (EXP-014: 128-seed inference-mode PF ensemble).
+2. Run EXP-013 IMMEDIATELY: apply projection postprocess to BASELINE_V1 predictions only (no
+   stacking). This is the cheapest way to recover to/past 9.964 with a documented postprocess gain.
+3. Diagnose the "3 test wells projected" anomaly (open_questions.md) before any projection-
+   enabled submission.
+
+**Action taken**: Updated `research/current_plan.md`, `research/experiment_queue.md`,
+`research/open_questions.md`, `memory/failed_attempts.md` (FAIL-003),
+`memory/leaderboard_progress.md` (EXP-007 row).
 
 ---
 
-## Accumulated Knowledge
+## 2026-06-10 (Part 2) -- Architecture corrected from notebook source; ravaghi artifacts discovered
 
-Summary of stable facts discovered (update periodically):
-
-| Fact | Evidence | Confidence |
-|------|----------|-----------|
-| [FILL] | [FILL] | Low/Med/High |
+See research/findings.md full entry. Key facts:
+- sub_2 (70%) = run_pf_lik_ensemble_scales(128 seeds, 4 scales) per test well, NOT pf_ancc
+- Correct Ridge: alpha=1.66, positive=True
+- ravaghi dataset = pre-built train.csv + 5 koolbox Trainer pickles (LGB x3 + CB x2)
+- EXP-007b = correct rebuild using ravaghi artifacts

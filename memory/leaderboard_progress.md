@@ -9,7 +9,7 @@ Track position and score over time.
 | Date | Public LB Score | Rank | Total Teams | Percentile | Notes |
 |------|----------------|------|-------------|-----------|-------|
 | [pre-existing, exact date unknown] | **9.964** | [FILL] | [FILL] | [FILL]% | `BASELINE_V1` — our `aw` ("Another-Work") pipeline: LightGBM×3 + CatBoost×3 weighted blend (`{catboost-2: 0.2718483, catboost-3: 0.3763824, lightgbm-1: 0.3517693}`) + PF-residual postprocess (`apply_pp`: `alpha=1.04, tau=65, w_pf=0.07`) + Savitzky-Golay smoothing (`sg_w=27, sg_p=3`). OOF RMSE = 10.4521227. Source: `notebooks/reference/mine/rogii-postprocess-research.ipynb` `WINNING_WEIGHTS`/`WINNING_PP_PARAMS`/`BASELINE_V1_*` constants (read 2026-06-08) |
-| [FILL] | [FILL] | [FILL] | [FILL] | [FILL]% | (next submission — pending EXP-007/009 reproduction of top-score architecture) |
+| 2026-06-10 | **10.208** | [FILL] | [FILL] | [FILL]% | EXP-007 submission: Ridge meta-learner stack (α=1.0) on 6 base-model OOF preds, tuned blend α=0.95 (almost pure ridge), + EXP-009 robust polynomial projection postprocess (deg=5, 4 iters) applied to test. **REGRESSED −0.244 RMSE vs BASELINE_V1**. Root cause: pf_ancc column is single-seed feature PF (RMSE 13.74), not the 128-seed inference-mode ensemble the reference architecture uses. See FAIL-003. |
 
 ## Reference Point — Top Public Notebooks (NOT our scores; for gap-tracking)
 

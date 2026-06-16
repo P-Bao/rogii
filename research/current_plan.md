@@ -1,116 +1,208 @@
 # Current Research Plan
 
-Last updated: 2026-06-08
-Status: Active
+Last updated: 2026-06-10
+Status: Active — Architecture-Corrected Rebuild Sprint
 
-## Reality Check (supersedes the original "start from mycarta toolkit" framing)
+---
 
-We do **not** need to bootstrap from the external mycarta toolkit — we already have a working,
-scored pipeline uploaded to `notebooks/reference/mine/` (the "Another-Work" / `aw` pipeline):
-feature build → LightGBM×3 + CatBoost×3 → weighted blend → particle-filter-residual postprocess
-→ Savitzky-Golay smoothing. **Real measured baseline: OOF RMSE 10.4521227, Public LB 9.964**
-(see `memory/leaderboard_progress.md`, `memory/previous_runs.md` for full config).
+## Score Board
 
-Top public notebooks in `notebooks/reference/top_score/` score **7.748–7.910** — a **~2.0–2.2
-RMSE gap**. Reading them in full shows the gap is *not* feature poverty (their feature core —
-`BEAMS`, `_pf_ancc`, `_beam_jit`, multi-scale NCC/DTW, `FORMATIONS` — is near-identical to ours,
-strongly suggesting shared lineage/reference). The gap is **architectural**: how predictions
-are combined and post-processed. See `research/findings.md` 2026-06-08 entry for the full
-side-by-side comparison.
+| Run | OOF RMSE | Public LB | Status |
+|-----|----------|-----------|--------|
+| BASELINE_V1 (aw pipeline) | 10.4521 | **9.964** | Best LB to date |
+| EXP-007 (ridge stack α=0.95 + proj postprocess) | 10.550 | **10.208** | Submitted — **REGRESSED −0.244 LB** |
 
-## Active Sprint
+---
 
-**Goal**: Close the ~2.1 RMSE gap by reproducing the four specific architectural components the
-top-score notebooks have and we don't (see Priority Queue). This is now an *ablation-toward-a-
-known-target* sprint, not a from-scratch baseline build.
-**Deadline**: Competition runs 2026-05-05 → 2026-08-05. Phase 1 target: complete by ~2026-06-22.
+## Architecture Correction (2026-06-10 — from reading source of rogii-ridge-sp45-proj.ipynb)
 
-## Phase 1 — Close the Architecture Gap
+Reading the actual source of `rogii-ridge-sp45-proj.ipynb` (Cell 21, 27, 30) revealed that our
+EXP-007 implementation was **architecturally wrong in two ways**:
 
-1. **Stacking via meta-learner** (EXP-007): replace our fixed-weight blend
-   (`{catboost-2: 0.27, catboost-3: 0.38, lightgbm-1: 0.35}`) with a Ridge meta-learner trained
-   on OOF predictions of all 6 base models (3 LGB + 3 CB), per top-score "# 4. Ensembling with
-   Ridge" section. Ridge is a STACKER here, not a standalone model — H-006 corrected.
-2. **Blend learned stack with an independent physical/PF heuristic** (EXP-007 cont'd): top
-   notebooks compute final = `0.30 * ridge_stack_pred + 0.70 * pf_beam_selector_heuristic`.
-   This is a genuinely different ensembling philosophy — diversify across inductive bias
-   (learned vs. model-free physics), not just across model families. New: H-008.
-3. **Per-well adaptive "selector"** (EXP-008): reproduce `selector_well_code` — classifies each
-   well by `n_eval` count (threshold 4840) and `Z`-span (thresholds 136.73 / 185.51) into 6 bins,
-   each mapped to a different PF-scale / beam-hold parameter variant
-   (`SELECTOR_BIN_VARIANTS`, `SELECTOR_GLOBAL_VARIANT='pf_scale_8_hold_0.2'`,
-   `SELECTOR_SCALES=(3,5,8,12)`). New: H-009.
-4. **Geometry-aware projection postprocess** (EXP-009): replace/augment our `sg_smooth`
-   (Savitzky-Golay directly on TVT) with their robust per-well degree-5 polynomial fit in
-   `U = TVT + Z - anchor` space, parameterized by normalized MD `s = (MD - MD_last)/(MD_end -
-   MD_last)`, with iterative reweighting (Tukey-style, 4 iters, `c=2.0`). Their own comment
-   claims this is **CV-validated worth ~0.3–0.5 RMSE** ("raw PF -0.54, deployed components
-   -0.33"). New: H-010.
-5. **Retune LightGBM toward heavier regularization** (EXP-010): their Optuna-tuned LGB variant
-   (`lr≈0.0093, num_leaves=64, reg_alpha≈10.8, reg_lambda≈95.8, colsample_bytree≈0.39,
-   min_child_samples=40`) is a very different regime from our hand-set params (`num_leaves=255,
-   reg_lambda=3.0, lr=0.02-0.03`). New: H-011.
-6. **Wire `tvt_from_contacts` as a same-well physical shortcut** (EXP-011): when a test well ID
-   also appears in train, top notebooks compute a physical TVT baseline directly from formation-
-   contact offsets (`tvt_from_contacts`, ref formation `EGFDU`) and use it preferentially
-   (`PF_SELECTOR_USE_SAME_WELL_PHYSICAL=True`). Confirm whether/how many test wells overlap train
-   IDs — if few, this is a low-leverage item; if many, it could be a meaningful chunk of the gap.
+### Correct reference architecture
 
-**Exit criteria**: Local OOF RMSE materially below 10.45 (toward the 7.7–7.9 reference range),
-and each of the 5 components above individually ablated and logged in `research/findings.md` so
-we know which one(s) actually drive the gain (do NOT assume all 5 contribute equally).
+```
+sub_1 = last_known_tvt + apply_pp(train_df,
+            ridge_oof_preds,          # model residual
+            pf_oof,                   # pf_ancc residual (soft constraint, w_pf=0.09 only)
+            alpha=1.0, tau=85, w_pf=0.09)
 
-## Priority Queue
+sub_2 = per-well SELECTOR:
+          code, variant = selector_well_code(hw_te)   # n_eval / Z-span → bin → variant name
+          pf_by_scale = run_pf_lik_ensemble_scales(hw_te, tw_ref,
+                            n_particles=500, n_seeds=128)  # 128-seed × 4-scale PF
+          tvt_beam    = run_beam_ensemble(hw_te, tw_ref)   # 14-config beam search ensemble
+          sub_2 = apply_selector_variant(variant, pf_by_scale, tvt_beam, last_known_tvt)
 
-1. [ ] EXP-007: Ridge meta-learner stack + 0.3/0.7 blend with PF/beam heuristic — Expected gain: largest single lever; likely the bulk of the ~2.1 RMSE gap (H-006 corrected, H-008)
-2. [ ] EXP-009: Robust per-well polynomial projection postprocess in U=TVT+Z space — Expected gain: ~0.3-0.5 RMSE per their own CV note (H-010)
-3. [ ] EXP-008: Per-well selector mechanism (n_eval / Z-span thresholds → PF variant lookup) — Expected gain: unclear magnitude; adaptive > one-size-fits-all in principle (H-009)
-4. [ ] EXP-010: Retune LightGBM toward Optuna-found heavy-regularization regime — Expected gain: small but compounds inside the stack (H-011)
-5. [ ] EXP-011: Same-well `tvt_from_contacts` physical shortcut for overlapping test/train well IDs — Expected gain: depends entirely on train/test well-ID overlap count (open question)
+final = 0.30 * sub_1 + 0.70 * sub_2
+        → then EXP-009 robust polynomial projection OVERWRITES this
+```
 
-### Deprioritized (from original from-scratch plan — now redundant)
+### What EXP-007 got wrong
 
-- EXP-001/002/003/005 (CV harness, NCC/tortuosity ablation, lateral-only structural baseline,
-  CV-vs-LB calibration): our `aw` pipeline already HAS multi-scale NCC, DTW, PF, beam search,
-  and `tvt_from_contacts`-equivalent formation features at ~150 features/well. Re-deriving them
-  from the external mycarta toolkit would be redundant churn. Keep the hypotheses (H-001/H-004)
-  as background reading but do not re-run as fresh experiments — instead audit whether our
-  existing ~150-feature set already covers them (fold into EXP-007 prep work).
+| Architecture item | Reference | Our EXP-007 |
+|-------------------|-----------|-------------|
+| `sub_1` postprocess | `apply_pp(ridge, pf_ancc, w_pf=0.09, tau=85)` — pf_ancc as 9% soft weight | None — pure ridge residual |
+| `sub_2` heuristic | 128-seed PF ensemble at **selector-chosen scale** + beam blend | `0.5*pf_ancc + 0.5*pf_z` from train_df column (same weak feature!) |
+| Ridge params | `alpha=1.66, tol=5e-4, positive=True` | `alpha=1.0, no positivity constraint` |
+| Model set | 5 models: LGB×3 (1 default + 2 Optuna) + CB×2 | 6 models: LGB×3 + CB×3 (our own pipeline) |
+| `koolbox.Trainer` CV wrapper | Groups-aware CV, stores OOF preds correctly | Custom `RidgeStacker` with KFold (no group awareness) |
 
-## In Progress
+The `pf_ancc` column only enters `sub_1` as a 9% soft weight via `apply_pp` — it was never
+intended to be "the heuristic branch." The heuristic (sub_2 = 70% of the final) is the
+128-seed PF ensemble computed **fresh at inference time per test well**.
 
-- (none — sprint not started; EXP-007 is next up)
+### Why this matters
+
+The 0.30/0.70 blend **only makes sense** when sub_2 (the 70% branch) is a quality PF ensemble.
+In our EXP-007, sub_2 was the weak pf_ancc column — hence the 0.30/0.70 ratio gave 12.14 RMSE
+(catastrophic). Using α=0.95 (near-pure ridge) was the correct fallback given what we had, but
+the Ridge itself has its own issues (wrong params, wrong CV, not group-aware).
+
+---
+
+## Key External Resource: `ravaghi/wellbore-geology-prediction-artifacts`
+
+Dataset: https://www.kaggle.com/datasets/ravaghi/wellbore-geology-prediction-artifacts
+Size: 2.36 GB. Version 6 (updated 2026-06-04). Apache 2.0.
+
+**Contents:**
+```
+artifacts_path/
+├── data/
+│   └── train.csv          ← Pre-built feature dataframe (all train wells, ~150+ features)
+└── models/
+    ├── lightgbm-1/        ← koolbox.Trainer pickle — default LGB (lr=0.03, n_leaves=255)
+    ├── lightgbm-2/        ← koolbox.Trainer pickle — Optuna LGB (lr=0.0093, n_leaves=64)
+    ├── lightgbm-3/        ← koolbox.Trainer pickle — Optuna LGB (seed=29)
+    ├── catboost-1/        ← koolbox.Trainer pickle — CB (lr=0.02, seed=7)
+    └── catboost-2/        ← koolbox.Trainer pickle — CB (lr=0.03, seed=123)
+```
+
+**How the reference notebook uses it** (Cell 8/13/15):
+```python
+# Feature load (avoids ~5-min feature build)
+if (CFG.artifacts_path / "data" / "train.csv").exists():
+    train_df = pd.read_csv(CFG.artifacts_path / "data" / "train.csv", low_memory=False)
+
+# Model load (avoids ~2-hr GPU training)
+trainer = joblib.load(list((CFG.artifacts_path / save_path).glob('*.pkl'))[0])
+oof_preds[name] = trainer.oof_preds   # already has OOF from CV run
+test_preds[name] = trainer.predict(X_test)
+```
+
+**Dependency**: requires `koolbox` Python package (private library). The reference notebook
+installs it from `/kaggle/input/koolbox-offline` (a separate Kaggle dataset with the `.whl`).
+
+**Impact on our plan**: Using the `ravaghi` artifacts + `koolbox-offline` means:
+- No GPU run needed for EXP-007b (load pre-trained models directly)
+- Same feature matrix as reference (no feature-engineering divergence)
+- Correct OOF predictions for Ridge stacking
+- Allows EXP-007b to run on CPU-only in ~30 min
+
+---
+
+## Phase 2 — Architecture-Corrected Rebuild
+
+**Goal**: Correctly implement the reference architecture using `ravaghi` artifacts + `koolbox`.
+**Deadline**: Competition ends 2026-08-05. Phase 2 target: working correct impl by ~2026-06-22.
+
+### P2-A: Cheap quick wins (PRIORITY 1 — no GPU, no koolbox needed)
+
+1. **EXP-013: BASELINE_V1 + projection postprocess** (~15 min CPU)
+   Apply EXP-009 projection postprocess to the KNOWN-GOOD aw blend OOF predictions.
+   Tests projection value independently of stacking. Reference claims ~0.3–0.5 RMSE gain.
+   **Run this first** — can submit immediately if CV improves.
+
+### P2-B: Correct architecture rebuild (PRIORITY 2 — requires koolbox + ravaghi)
+
+2. **EXP-007b: Correct re-implementation** (~30 min CPU after artifact load)
+   - Load `train.csv` from `ravaghi` (skip feature build)
+   - Load 5 Trainer pickles (skip GPU training)
+   - Ridge with correct params: `alpha=1.66, tol=5e-4, positive=True`
+   - `sub_1 = apply_pp(ridge_preds, pf_ancc_residual, alpha=1.0, tau=85, w_pf=0.09)`
+   - `sub_2 = selector → run_pf_lik_ensemble_scales(128 seeds × 4 scales) + beam ensemble`
+   - `final = 0.30 * sub_1 + 0.70 * sub_2`
+   - Then apply EXP-009 projection as final step
+   - **This is the correct reproduction of the 7.748-score architecture.**
+
+3. **EXP-008b: Selector mechanism** (bundled into EXP-007b — it's in Cell 27 of the reference)
+   The selector is computed inline during the sub_2 heuristic build — not a separate experiment.
+
+### P2-C: Understand koolbox dependency (PREREQUISITE for EXP-007b)
+
+4. **koolbox investigation**: Determine whether we can:
+   - (a) Use the `koolbox-offline` Kaggle dataset as-is
+   - (b) Implement a minimal `koolbox.Trainer` equivalent (the notebook only uses:
+     `trainer.oof_preds`, `trainer.overall_score`, `trainer.predict(X_test)`)
+   - (c) Whether our own aw pipeline's `GroupKFold(5)` OOF preds are compatible enough to
+     substitute (same fold structure needed for Ridge to generalize)
+
+### P2-D: Ablation clarity (PRIORITY 3)
+
+5. **EXP-014: 128-seed PF ensemble on OOF wells** — validate sub_2 standalone RMSE.
+   Only run if EXP-007b shows sub_2 (selector PF) is still weak — unlikely given reference
+   scores, but needed to attribute gain correctly.
+
+6. **EXP-010: Optuna LGB** — already in `ravaghi` as lightgbm-2/3. Covered by EXP-007b.
+
+7. **EXP-011: Same-well tvt_from_contacts** — Cell 27 handles this automatically
+   (`if wid in train_wells: tvt_phys = tvt_from_contacts(...)`). Covered by EXP-007b.
+
+---
+
+## Priority Queue (Updated 2026-06-15)
+
+1. [x] ~~EXP-007~~ — DONE, REGRESSED. Architecture was wrong.
+2. [x] ~~koolbox check~~ — DONE. Bypassed by writing a local `koolbox.Trainer` stub in `koolbox/` to support offline deserialization.
+3. [ ] **EXP-013**: BASELINE_V1 + projection postprocess — ~15 min CPU, submit if CV↑. Cauchy weights projection code implemented in `src/postprocessing/projection.py` and validated; run script ready at `scratch/run_projection_postprocess.py`.
+4. [ ] **EXP-007b**: Correct architecture rebuild using `ravaghi` artifacts + correct Ridge params. Execution script ready at `scratch/run_exp007b.py` and currently validating.
+5. [ ] EXP-014: 128-seed PF OOF validation (deferred — covered by EXP-007b)
+6. [ ] EXP-005: CV scheme calibration (deferred until architecture stabilizes)
+7. [ ] EXP-006: MiniROCKET features (Phase 3 stretch)
+
+---
+
+## Strategic Direction (Updated 2026-06-15)
+
+We now have a clear, concrete path:
+
+**Step 1 (today)**: Run EXP-013 (projection on BASELINE_V1) on Kaggle using `scratch/run_projection_postprocess.py`. If OOF improves → submit → new best LB.
+
+**Step 2 (today/this week)**: Run EXP-007b on Kaggle using `scratch/run_exp007b.py` with `ravaghi` model artifacts. The script uses the correct Ridge stacking (positive=True, α=1.66), sub_1 postprocess (apply_pp at w_pf=0.09), sub_2 (128-seed PF ensemble + beam blend selector), and Cauchy projection postprocess.
+
+**Step 3 (after EXP-007b)**: If EXP-007b scores ~7.7–7.9, ablate what actually helps vs our baseline. If it still regresses, investigate which sub-component fails.
+
+---
 
 ## Blocked
 
-- Train/test well-ID overlap count (needed for EXP-011 prioritization) — requires a quick
-  `set(train_wells) & set(test_wells)` check against the actual data, not yet run locally.
-- `dataset_info.md` row counts / missingness still TBD — lower priority now that we have a
-  working pipeline; back-fill opportunistically from the `aw` `prepare_meta.json` artifact.
+- *None* — All blockers are resolved.
+  - `koolbox-offline` blocker bypassed by local stub package.
+  - train.csv column presence verified from reference source.
+  - 3-well projection behavior verified as correct.
+
+---
 
 ## Recently Completed
 
 | Date | Task | Result | Next Action |
 |------|------|--------|-------------|
-| 2026-06-08 | Repo research pass: read all `references/`, fetched mycarta toolkit repo + methodology notes | Found external reference solution w/ documented ablations | Superseded — see "Reality Check" above |
-| 2026-06-08 | Read all 5 of our own uploaded notebooks (`eda-features`, `train-lightgbm`, `train-catboost`, `postprocess-research`, `submission`) end to end | Extracted real baseline numbers (OOF 10.4521, LB 9.964), winning blend weights, postprocess params, full feature-pipeline architecture | Recorded in `memory/leaderboard_progress.md`, `memory/previous_runs.md`, `research/findings.md` |
-| 2026-06-08 | Read all 3 top-score reference notebooks (`ridge-sp45-proj` 7.748, `ridge-artifact-parameter-experiments` 7.881, `sel15-forced-selector` 7.807/7.839 ref) | Identified the 5 specific architectural deltas vs. our pipeline (stacking, blend-with-heuristic, selector, projection postprocess, hyperparameter regime) | Drove this rewrite of Phase 1 — EXP-007..011 |
+| 2026-06-08 | Repo research pass, read all notebooks | Identified 5 architectural deltas | Drove Phase 1 plan |
+| 2026-06-10 | EXP-007: Ridge stack + projection submission | **REGRESSED: LB 10.208 vs 9.964** | Architecture re-analysis |
+| 2026-06-10 | Read full source of rogii-ridge-sp45-proj.ipynb | **Architecture corrected** — `sub_2` is 128-seed PF/beam selector, NOT pf_ancc column; `sub_1` is ridge + apply_pp at w_pf=0.09; Ridge params = alpha=1.66, positive=True | EXP-007b |
+| 2026-06-10 | Discovered `ravaghi/wellbore-geology-prediction-artifacts` dataset | Pre-built `train.csv` + 5 koolbox Trainer pickles — eliminates GPU training for EXP-007b | Add to Kaggle notebook as data source |
 
-## Strategic Direction
-
-Stop treating this as a feature-engineering problem — our feature core is already comparable to
-(and in some respects richer than) the top-score notebooks'. The ~2.1 RMSE gap lives in
-**ensembling philosophy and postprocessing geometry**: (a) a learned Ridge-stack blended with an
-independent model-free PF/beam heuristic at a fixed ratio, (b) per-well adaptive parameter
-selection instead of global constants, and (c) a geometry-aware (U=TVT+Z space) projection
-postprocess instead of naive TVT-space smoothing. Reproduce these in priority order (EXP-007 →
-EXP-009 → EXP-008 → EXP-010 → EXP-011), ablating each individually so we can attribute the gain.
+---
 
 ## Decision Log
 
 | Date | Decision | Reason |
 |------|----------|--------|
-| 2026-06-08 | Adopt StratifiedGroupKFold (signed azimuth, median TVT, spatial bins) as the default CV scheme instead of plain KFold or pure spatial blocking | Toolkit found train/test wells are spatially *interpolated*, not extrapolated — pure spatial blocking is overly pessimistic vs. the real test condition; well-level grouping prevents leakage. NOTE: our `aw` pipeline currently uses plain `GroupKFold(5)` — revisit whether switching helps once EXP-007..011 land |
-| 2026-06-08 | Reject "fit per-well linear TVT = a·Z + b on the full known section" as a baseline feature | Methodology note `within_well_tvt_z_decoupling.md`: full-section fit is dominated by the build section (slope ≈ −1); within a single lateral, slope ≈ −0.14 |
-| 2026-06-08 | Treat MassSNN (AEON) and scipy NCC as redundant; do not implement both | `AEON_evaluation.md` proves `d² = 2n(1−ρ)` — z-normalized Euclidean distance and Pearson correlation rank identically |
-| 2026-06-08 | SUPERSEDED original "build from mycarta toolkit" plan — pivot to "close the gap to our own uploaded reference notebooks" | Discovered we already have a scored, working pipeline (LB 9.964) far more advanced than a from-scratch toolkit reproduction would produce in the same timeframe; the toolkit is now a secondary cross-reference, not the primary roadmap |
+| 2026-06-08 | Adopt StratifiedGroupKFold as default CV | Train/test wells spatially interpolated, not extrapolated |
+| 2026-06-08 | Reject full-section TVT~Z linear fit | Build-section dominated; within-lateral slope ≈ −0.14, not −1 |
+| 2026-06-08 | Treat MassSNN and scipy NCC as redundant | d² = 2n(1−ρ), mathematically identical |
+| 2026-06-08 | Pivot from mycarta toolkit rebuild to closing architecture gap | Already have LB 9.964 baseline |
+| 2026-06-10 | Do NOT use pf_ancc column as the 70% heuristic branch | pf_ancc is only a 9% soft weight in apply_pp (sub_1); the 70% branch is the 128-seed PF selector ensemble (sub_2) |
+| 2026-06-10 | Use `ravaghi` artifacts for EXP-007b instead of retraining | Eliminates 2+ hrs GPU, ensures identical OOF preds to reference, correct koolbox Trainer CV wrapper |
+| 2026-06-10 | EXP-013 before EXP-007b | Projection on BASELINE_V1 is zero-risk, 15-min, submittable if OOF↑; EXP-007b needs koolbox setup which takes more time |
